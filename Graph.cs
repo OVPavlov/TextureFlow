@@ -12,8 +12,8 @@ namespace TextureFlow
         internal Dictionary<string, Graph> _inputs = new Dictionary<string, Graph>();
         internal int _downsample = 1;
         internal Mesh _mesh;
-        private RenderTextureDescriptor? _createTexture = null;
-        private RenderTexture _textureReference;
+        internal RenderTextureDescriptor? _createTexture = null;
+        internal RenderTexture _textureReference;
         private int _outputReferences = 0;
         private RenderTexture _output;
 
@@ -81,6 +81,10 @@ namespace TextureFlow
 
             return graph;
         }
+        public static Graph Process(Shader shader, params Property[] properties)
+        {
+            return Process(shader, 0, properties);
+        }
 
         public static Graph Clear(Graph graph, bool color, bool depth, bool stencil)
         {
@@ -130,7 +134,7 @@ namespace TextureFlow
                     continue;
                 }
 
-                if (graph._inputs.Count < 1) throw new System.Exception("there's no inputs in the node and it doesn't create a texture");
+                if (graph._inputs.Count == 0) throw new System.Exception("there's no inputs in the node and it doesn't create a texture");
 
                 int width = 0, height = 0;
                 foreach (var pair in graph._inputs)
@@ -160,7 +164,7 @@ namespace TextureFlow
                 Graph graph = queue[i];
 
                 if (graph._createTexture != null || graph._textureReference != null)
-                    continue;
+                    continue;                
 
                 if (previousTarget != graph._output)                
                     cb.SetRenderTarget(previousTarget = graph._output);                
@@ -200,12 +204,17 @@ namespace TextureFlow
             return new Input(property, this);
         }
 
-        public Graph Proces(Shader shader, int path, params Property[] properties)
+        public Graph Proces(Shader shader, int pass, params Property[] properties)
         {
             System.Array.Resize(ref properties, properties.Length + 1);
             properties[properties.Length - 1] = this;
 
-            return Graph.Process(shader, path, properties);
+            return Graph.Process(shader, pass, properties);
+        }
+
+        public Graph Proces(Shader shader, params Property[] properties)
+        {
+            return Proces(shader, 0, properties);
         }
 
         public Graph Downsample(PowOf2 pot = PowOf2._2)

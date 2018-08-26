@@ -47,22 +47,75 @@ namespace TextureFlow
     {
         string _property;
         Vector4 _vector;
+        bool _relativeToResolution;
 
-        public Vec(string property, Vector4 vector)
+        public Vec(string property, Vector4 vector, bool relativeToResolution = false)
         {
             _property = property;
             _vector = vector;
+            _relativeToResolution = relativeToResolution;
         }
-        public Vec(string property, Vector3 vector) : this(property, (Vector4)vector) { }
-        public Vec(string property, Vector2 vector) : this(property, (Vector4)vector) { }
-        public Vec(string property, float x, float y, float z, float w) : this(property, new Vector4(x, y, z, w)) { }
-        public Vec(string property, float x, float y, float z) : this(property, x, y, z, 0) { }
-        public Vec(string property, float x, float y) : this(property, x, y, 0, 0) { }
-        public Vec(string property, float x) : this(property, x, 0, 0, 0) { }
+        public Vec(string property, Vector3 vector, bool relativeToResolution = false) : this(property, (Vector4)vector, relativeToResolution) { }
+        public Vec(string property, Vector2 vector, bool relativeToResolution = false) : this(property, (Vector4)vector, relativeToResolution) { }
+        public Vec(string property, float x, float y, float z, float w, bool relativeToResolution = false) : this(property, new Vector4(x, y, z, w), relativeToResolution) { }
+        public Vec(string property, float x, float y, float z, bool relativeToResolution = false) : this(property, x, y, z, 0, relativeToResolution) { }
+        public Vec(string property, float x, float y, bool relativeToResolution = false) : this(property, x, y, 0, 0, relativeToResolution) { }
+        public Vec(string property, float x, bool relativeToResolution = false) : this(property, x, 0, 0, 0, relativeToResolution) { }
 
         internal override void Apply(Graph graph)
         {
-            graph._propertyBlock.SetVector(_property, _vector);
+            if (_relativeToResolution)
+            {
+                Vector2Int size = GetRes(graph);
+                float pixX = 1f / size.x;
+                float pixY = 1f / size.y;
+                graph._propertyBlock.SetVector(_property, new Vector4(_vector.x * pixX, _vector.y * pixY, _vector.z * pixX, _vector.w * pixY));
+            }
+            else
+                graph._propertyBlock.SetVector(_property, _vector);
+        }
+
+        private Vector2Int GetRes(Graph graph)
+        {
+            if (graph._createTexture != null)
+            {
+                return new Vector2Int(graph._createTexture.Value.width, graph._createTexture.Value.height);
+            }
+            if (graph._textureReference != null)
+            {
+                return new Vector2Int(graph._textureReference.width, graph._textureReference.height);
+            }
+
+            if (graph._inputs.Count == 0) throw new System.Exception("there's no inputs in the node and it doesn't create a texture");
+
+            Vector2Int size = Vector2Int.zero;
+            foreach (var pair in graph._inputs)
+            {
+                size = GetRes(pair.Value);
+                size.x = size.x / graph._downsample;
+                size.y = size.y / graph._downsample;
+                break;
+            }
+            return size;
+        }
+
+    }
+
+    public class Col : Property
+    {
+        string _property;
+        Color _color;
+
+        public Col(string property, Color color)
+        {
+            _property = property;
+            _color = color;
+        }
+        public Col(string property, float r, float g, float b, float a) : this(property, new Color(r,  g,  b,  a)) { }
+
+        internal override void Apply(Graph graph)
+        {
+            graph._propertyBlock.SetColor(_property, _color);
         }
     }
 
