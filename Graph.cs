@@ -32,8 +32,10 @@ namespace TextureFlow
                     _downsample = 4,
                 };
                 ((Property)graph).Apply(newGraph);
+                new Vec("_PixelOffset", 1, 1, true).Apply(newGraph);
                 graph = newGraph;
             }
+
 
             if (di == 2)
             {
@@ -47,6 +49,51 @@ namespace TextureFlow
 
             return graph;
         }
+
+        public static Graph GaussianBlur(Graph graph, float pixels)
+        {
+            Vector4[] samples = TextureFlow.GaussianBlur.GetSamples(pixels);
+            int pass = Mathf.Clamp(samples.Length - 1, 0, 6);
+
+            Shader gaussianBlur = Shader.Find("Hidden/TextureFlow/GaussianBlur");
+            Graph newGraph;
+
+            string ss = "";
+            for (int i = 0; i < samples.Length; i++)            
+                ss += samples[i].x.ToString("0.000") + "\t";
+            ss += "\n";
+            for (int i = 0; i < samples.Length; i++)            
+                ss += samples[i].y.ToString("0.000") + "\t";
+            Debug.Log(ss);
+
+
+            newGraph = new Graph()
+            {
+                _shader = gaussianBlur,
+                _pass = pass
+            };
+
+            ((Property)graph).Apply(newGraph);
+            new Vec("_Pixel", 1, 0, true).Apply(newGraph);
+            for (int i = 0; i < samples.Length; i++)
+                new Vec("_Sample" + i, samples[i]).Apply(newGraph);
+
+            graph = newGraph;
+
+            newGraph = new Graph()
+            {
+                _shader = gaussianBlur,
+                _pass = pass
+            };
+
+            ((Property)graph).Apply(newGraph);
+            new Vec("_Pixel", 0, 1, true).Apply(newGraph);
+            for (int i = 0; i < samples.Length; i++)
+                new Vec("_Sample" + i, samples[i]).Apply(newGraph);
+
+            return newGraph;
+        }
+
 
         public static Graph Create(int width,int height)
         {
@@ -118,7 +165,7 @@ namespace TextureFlow
             queue.Add(this);
         }
 
-        private static void FillTextures(List<Graph> queue, TexturePool pool)
+        private static void FillTextures(List<Graph> queue, TexturePool pool, bool drawOnScreen, out RenderTexture result)
         {
             for (int i = 0; i < queue.Count; i++)
             {
@@ -144,7 +191,8 @@ namespace TextureFlow
                     break;
                 }
 
-                graph._output = pool.GetOrAdd(width, height);
+                bool theLastOne = i == (queue.Count - 1);
+                graph._output = theLastOne && drawOnScreen ? null : pool.GetOrAdd(width, height);
 
                 foreach (var pair in graph._inputs)
                 {
@@ -154,6 +202,7 @@ namespace TextureFlow
                         pool.Release(pair.Value._output);
                 }
             }
+            result = queue[queue.Count - 1]._output;
         }
 
         private static void BuildCommandBuffer(List<Graph> queue, CommandBuffer cb)
@@ -174,16 +223,41 @@ namespace TextureFlow
             }
         }
 
-        public CommandBuffer ToCommandBuffer()
+        private RenderTexture FillCommandBuffer(CommandBuffer commandBuffer, bool drawOnScreen)
         {
             List<Graph> queue = new List<Graph>();
             FillQueue(queue);
-            FillTextures(queue, new TexturePool());
-            CommandBuffer cb = new CommandBuffer();
-            cb.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.Ortho(0, 1, 0, 1, 0, 1));
-            BuildCommandBuffer(queue, cb);
-            return cb;
+            RenderTexture result;
+            FillTextures(queue, new TexturePool(), drawOnScreen, out result);
+            commandBuffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.Ortho(0, 1, 0, 1, 0, 1));
+            BuildCommandBuffer(queue, commandBuffer);
+            return result;
         }
+
+        public void FillCommandBuffer(CommandBuffer commandBuffer)
+        {
+            FillCommandBuffer(commandBuffer, true);
+        }
+
+        public void FillCommandBuffer(CommandBuffer commandBuffer, out RenderTexture result)
+        {
+            result = FillCommandBuffer(commandBuffer, false);
+        }
+
+        public CommandBuffer ToCommandBuffer()
+        {
+            CommandBuffer commandBuffer = new CommandBuffer();
+            FillCommandBuffer(commandBuffer, true);
+            return commandBuffer;
+        }
+
+        public CommandBuffer ToCommandBuffer(out RenderTexture result)
+        {
+            CommandBuffer commandBuffer = new CommandBuffer();
+            result = FillCommandBuffer(commandBuffer, false);
+            return commandBuffer;
+        }
+
         #endregion
 
         #region SyntacticSugar
